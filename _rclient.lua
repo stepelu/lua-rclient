@@ -4,8 +4,8 @@
 -- Copyright (C) 2011-2014 Stefano Peluchetti. All rights reserved.
 --
 -- Features, documentation and more: http://www.scilua.org .
--- 
--- This file is part of the Rclient library, which is released under the MIT 
+--
+-- This file is part of the Rclient library, which is released under the MIT
 -- license: full text in file LICENSE.TXT in the library's root folder.
 --------------------------------------------------------------------------------
 
@@ -34,18 +34,18 @@ local function err(code, msg)
 end
 
 local function rerr(code, msg)
-  error("r["..code.."]: "..msg)
+  error("R["..code.."]: "..msg)
 end
 
--- Data serialization format, for more info see C headers from Rserve:
--- String serialization format for any command (size here limited to 4GB).
--- It follows data_size[56] is never used.
--- | cmd_head[16] | head[4/8] | data[?] |
--- | cmd_head[16] | = | cmd_type[4] | head_data_size[4] | 0[8] |
--- | head[4/8] | = | data_type[1] | data_size[3/7] |
+-- String serialization format for any command (size here limited to 4GB, it
+-- follows data_size[56] is never used):
+-- | cmd_head[16] | head[4 or 8] | data[?] |
+-- | cmd_head[16] | = | cmd_type[4]  | head_data_size[4] | 0[8] |
+-- | head[4 or 8] | = | data_type[1] | data_size[3 or 7] |
 -- if data_type[1] == DT.SEXP (always for transmitted values) then:
---   | data[?] | = | xt_head[4/8] | xt_data[?] |
---   | xt_head[?] | = | xt_type[1] | xt_size[3/7] |
+--   | data[?] |    = | xt_head[4 or 8] | xt_data[?] |
+--   | xt_head[?] | = | xt_type[1]      | xt_size[3 or 7] |
+-- For more info see C headers from Rserve.
 
 -- From Rserve header ----------------------------------------------------------
 
@@ -63,73 +63,71 @@ local RESP = {
 }
 
 local RRE = {
-  auth_failed    = 0x41, 
+  auth_failed    = 0x41,
   conn_broken    = 0x42,
   inv_cmd        = 0x43,
-  inv_par        = 0x44, 
-  Rerror         = 0x45, 				     
-  IOerror        = 0x46, 
-  notOpen        = 0x47, 
-  accessDenied   = 0x48, 				     
+  inv_par        = 0x44,
+  Rerror         = 0x45,
+  IOerror        = 0x46,
+  notOpen        = 0x47,
+  accessDenied   = 0x48,
   unsupportedCmd = 0x49,
   unknownCmd     = 0x4a,
   data_overflow  = 0x4b,
-  object_too_big = 0x4c, 
-  out_of_mem     = 0x4d, 
+  object_too_big = 0x4c,
+  out_of_mem     = 0x4d,
   ctrl_closed    = 0x4e,
-  session_busy   = 0x50, 
+  session_busy   = 0x50,
   detach_failed  = 0x51,
 }
 
 local DT = {
-  INT          = 1,  -- N int 
-  STRING       = 4,  -- Y 0 terminted string 
-  BYTESTREAM   = 5,  -- N stream of bytes (unlike STRING may contain 0) 
-  SEXP         = 10, -- Y encoded SEXP 
+  INT          = 1,  -- N int
+  STRING       = 4,  -- Y 0 terminated string
+  BYTESTREAM   = 5,  -- N stream of bytes (unlike STRING may contain 0)
+  SEXP         = 10, -- Y encoded SEXP
 }
 -- REMARK: We limit to 4gb size.
 
 local XT = {
   NULL         = 0,  -- data: [0]
-  STR          = 3,  -- data: [n]char null-term. strg.
-  S4           = 7,  -- NO data: [0] 
-  VECTOR       = 16, -- data: [?]REXP,REXP,.. 
-  CLOS         = 18, -- NO X formals, X body  (closure; since 0.1-5) 
-  SYMNAME      = 19, -- same as STR (since 0.5) 
-  LIST_NOTAG   = 20, -- same as VECTOR (since 0.5) 
-  LIST_TAG     = 21, -- X tag, X val, Y tag, Y val, ... (since 0.5) 
-  LANG_NOTAG   = 22, -- same as LIST_NOTAG (since 0.5) 
-  LANG_TAG     = 23, -- same as LIST_TAG (since 0.5) 
-  VECTOR_EXP   = 26, -- same as VECTOR (since 0.5) 
-  ARRAY_INT    = 32, -- data: [n*4]int,int,.. 
-  ARRAY_DOUBLE = 33, -- data: [n*8]double,double,.. 
-  ARRAY_STR    = 34, -- data: string,string,.. (string=byte,byte,...,0) 
-                     --       padded with '\01' 
-  ARRAY_BOOL   = 36, -- data: int(n),byte,byte,... 
-  RAW          = 37, -- data: int(n),byte,byte,... 
-  ARRAY_CPLX   = 38, -- data: [n*16]double,double,... (Re,Im,Re,Im,...) 
-  UNKNOWN      = 48, -- data: [4]int - SEXP type (as from TYPEOF(x)) 
-  -- Total primary: 4 trivial types (NULL, STR, S4, UNKNOWN) + 6 array types 
-  --              + 3 recursive types
+  STR          = 3,  -- data: [n]char null-term. string
+  S4           = 7,  -- [NO!] data: [0]
+  VECTOR       = 16, -- data: [?]REXP,REXP,..
+  CLOS         = 18, -- [NO!] X formals, X body  (closure; since 0.1-5)
+  SYMNAME      = 19, -- same as STR (since 0.5)
+  LIST_NOTAG   = 20, -- same as VECTOR (since 0.5)
+  LIST_TAG     = 21, -- X tag, X val, Y tag, Y val, ... (since 0.5)
+  LANG_NOTAG   = 22, -- same as VECTOR (since 0.5)
+  LANG_TAG     = 23, -- same as LIST_TAG (since 0.5)
+  VECTOR_EXP   = 26, -- same as VECTOR (since 0.5)
+  ARRAY_INT    = 32, -- data: [n*4]int,int,..
+  ARRAY_DOUBLE = 33, -- data: [n*8]double,double,..
+  ARRAY_STR    = 34, -- data: string,string,.. (string=byte,byte,...,0)
+                     --       padded with '\01'
+  ARRAY_BOOL   = 36, -- data: int(n),byte,byte,...
+  RAW          = 37, -- data: int(n),byte,byte,...
+  ARRAY_CPLX   = 38, -- data: [n*16]double,double,... (Re,Im,Re,Im,...)
+  UNKNOWN      = 48, -- data: [4]int - SEXP type (as from TYPEOF(x))
 }
 
 local LARGE    = 64 -- if this flag is set then the length of the object
-  -- is coded as 56-bit integer enlarging the header by 4 bytes 
-  
-local HAS_ATTR = 128 -- flag; if set, the following REXP is the	attribute 
+  -- is coded as 56-bit integer enlarging the header by 4 bytes
+
+local HAS_ATTR = 128 -- flag; if set, the following REXP is the	attribute
   -- the use of attributes and vectors results in recursive storage of REXPs
 
---------------------------------------------------------------------------------  
+--------------------------------------------------------------------------------
 
 -- Debugging.
 local function print_bytes(s)
   local o = {}
-  for i=1,#s do 
+  for i=1,#s do
     o[#o+1] = bit.tohex(string.byte(s, i)):sub(7,8)
   end
   print(table.concat(o,","))
-end  
-  
+end
+
 local TX = {}
 for k,v in pairs(XT) do TX[v] = k end
 
@@ -149,7 +147,7 @@ local enc = {
   end,
   int = function(x)
     return ffi.string(int1_ct(x), 4)
-  end,  
+  end,
   double = function(x)
     return ffi.string(double1_ct(x), 8)
   end,
@@ -186,7 +184,7 @@ local dec = {
   end,
   int56 = function(s) -- TODO: Is it always ok? (char sign...)
     -- Ensure 32 bits limit.
-    assert(s:byte(5) == 0 and s:byte(6) == 0 and s:byte(7) == 0) 
+    assert(s:byte(5) == 0 and s:byte(6) == 0 and s:byte(7) == 0)
     return ffi.cast("int32_t*", s)[0]
   end
 }
@@ -221,13 +219,13 @@ end
 local function dec_head(s)
   local t = dec.byte(s:sub(1, 1))
   local first, last = 0, 0
-  if not (ba(t, LARGE) ~= 0) then 
+  if not (ba(t, LARGE) ~= 0) then
     first = 5
     last = first + dec.int24(s:sub(2, 4)) - 1
   else
     first = 9
     last = first + dec.int56(s:sub(2, 8)) - 1
-  end  
+  end
   return t, first, last
 end
 
@@ -265,13 +263,13 @@ local function isint(x)
   return type(x) == "table" and getmetatable(x) == int_mt
 end
 
-local function int(x)
+local function asint(x)
   return setmetatable({ x }, int_mt)
 end
 
 local vec_mt = {}
 
-local function vec(x)
+local function asvec(x)
   return setmetatable({ x }, vec_mt)
 end
 
@@ -291,7 +289,7 @@ end
 
 local pli_mt = {}
 
-local function pairlist(x)
+local function aspairlist(x)
   return setmetatable({ x }, pli_mt)
 end
 
@@ -299,7 +297,26 @@ local function ispairlist(x)
   return type(x) == "table" and getmetatable(x) == pli_mt
 end
 
--- TODO: Binary data.
+-- On the R implementation side we have the following primitive data structures, 
+-- correspondence primitive --> underlying data representation:
+-- NULL                    = nothing
+-- STR                     = char[?] ('\00'-terminated '\01'-4bytes-padded)
+-- ARRAY_{INT,DOUBLE,CPLX} = type[?]
+-- ARRAY_BOOL              = n, bool[n]
+-- ARRAY_STR               = STR[?]
+-- VECTOR                  = REXP[?]
+-- LIST_TAG                = (tag, val)[?]
+
+-- On the R language side:
+-- Null                    = NULL
+-- c() homogeneous, single = ARRAY_*
+-- matrix()                = ARRAY_* + attr: dim[2]
+-- array()                 = ARRAY_* + attr: dim[?]
+-- c() heterogeneous       = VECTOR
+-- list()                  = VECTOR  + attr: (col)names
+-- data.frame()            = VECTOR  + attr: (col)names, row.names, class
+-- pairlist() (deprecated) = LIST_TAG
+
 local function data_xt(data)
   if type(data) ~= "table" then
     data = { data }
@@ -328,7 +345,6 @@ local function data_xt(data)
   end
 end
 
--- TODO: Use weak table to mark with attributes to avoid conflicts on __att.
 local function decode_sexp(xt_t, s)
   local attr = ba(xt_t, HAS_ATTR) ~= 0
   xt_t = ba(xt_t, 63)
@@ -349,22 +365,23 @@ end
 
 local function encode_sexp(x)
   if iswith(x) then
-    local a, a_sexp = data_xt(pairlist(x[1])) -- Attribute.
-    local a_v = xt_encode[a_sexp](a)
-    local a_h = enc_head(a_sexp, #a_v)
+    -- Only place where pairlist is actually used:
+    local a, a_sexp = data_xt(aspairlist(x[1])) -- Attribute.
+    local a_v       = xt_encode[a_sexp](a)
+    local a_h       = enc_head(a_sexp, #a_v)
     local d, d_sexp = data_xt(x[2]) -- Data.
-    local d_v = xt_encode[d_sexp](d)
-    local d_h = enc_head(d_sexp, #d_v + #a_h + #a_v, true)
+    local d_v       = xt_encode[d_sexp](d)
+    local d_h       = enc_head(d_sexp, #d_v + #a_h + #a_v, true)
     return d_h..a_h..a_v..d_v
   else
     local x, x_sexp = data_xt(x)
-    local x_v = xt_encode[x_sexp](x)
-    local x_h = enc_head(x_sexp, #x_v)
+    local x_v       = xt_encode[x_sexp](x)
+    local x_h       = enc_head(x_sexp, #x_v)
     return x_h..x_v
   end
 end
 
-xt_decode[XT.NULL] = function(s) 
+xt_decode[XT.NULL] = function(s)
   return nil
 end
 
@@ -395,15 +412,15 @@ xt_decode[XT.LIST_TAG] = function(s)
     local tag_t, tag_f, tag_l = dec_head(s:sub(off + 1, math.min(#s, off + 8)))
     local tag = decode_sexp(tag_t, s:sub(off + tag_f, off + tag_l))
     off = off + tag_l
-    
-    local val_t, val_f, val_l = dec_head(s:sub(off + 1, math.min(#s, off + 8)))    
+
+    local val_t, val_f, val_l = dec_head(s:sub(off + 1, math.min(#s, off + 8)))
     local val = decode_sexp(val_t, s:sub(off + val_f, off + val_l))
     off = off + val_l
-    
-    if val == nil then 
+
+    if val == nil then
       if o[0] == nil then o[0] = {} end
       table.insert(o[0], tag)
-    else    
+    else
       assert(o[val] == nil) -- Avoid collisions.
       o[val] = tag -- I am using the naming from the documentation.
     end
@@ -415,13 +432,13 @@ xt_decode[XT.LANG_TAG] = xt_decode[XT.LIST_TAG]
 xt_decode[XT.ARRAY_INT] = function(s) -- It's of "int": signed 32bit integer.
   local o = {}
   for i=1,#s/4 do o[i] = dec.int(s:sub((i-1)*4+1, i*4)) end
-  return o  
+  return o
 end
 
 xt_decode[XT.ARRAY_DOUBLE] = function(s)
   local o = {}
   for i=1,#s/8 do o[i] = dec.double(s:sub((i-1)*8+1, i*8)) end
-  return o  
+  return o
 end
 
 xt_decode[XT.ARRAY_STR] = function(s)
@@ -433,7 +450,7 @@ xt_decode[XT.ARRAY_BOOL] = function(s)
   local o = {}
   local n = dec.int(s:sub(1, 4))
   for i=1,n do o[i] = dec.bool(s:sub(4+i, 4+i)) end
-  return o  
+  return o
 end
 
 xt_decode[XT.RAW] = function(s)
@@ -449,7 +466,7 @@ xt_decode[XT.ARRAY_CPLX] = function(s)
     local im = dec.double(s:sub(off + 9, off + 16))
     o[i] = complex_ct(re, im)
   end
-  return o 
+  return o
 end
 
 xt_decode[XT.UNKNOWN] = function(s)
@@ -504,7 +521,7 @@ end
 
 xt_encode[XT.VECTOR] = function(x)
   local o = {}
-  for i=1,#x do 
+  for i=1,#x do
     o[i] = encode_sexp(x[i])
   end
   return table.concat(o)
@@ -537,7 +554,7 @@ end
 local function resp(sconn)
   local cmd_h = sconn:receive(16)
   local resp, length = dec_cmd_head(cmd_h)
-  if not (resp == RESP.OK) then rerr("error", ERR[br(resp, 24)]) end  
+  if not (resp == RESP.OK) then rerr("error", ERR[br(resp, 24)]) end
   if length > 0 then
     local data = sconn:receive(length)
     local dt_t, dt_f, dt_l = dec_head(data)
@@ -573,7 +590,7 @@ function rconn_mt:__call(s)
   local sp = split(s, "\n")
   for i=1,#sp do
     local caps = 'capture.output('..sp[i]..')'
-    local o = try_eval(self._sconn, caps)  
+    local o = try_eval(self._sconn, caps)
     print(table.concat(o, "\n"))
   end
 end
@@ -586,12 +603,13 @@ function rconn_mt:__newindex(k, v)
   local data1 = xt_encode[XT.STR](k)
   local dt1_h = enc_head(DT.STRING, #data1)
   local ntot1 = #dt1_h + #data1
-  
+
   local v_enc = encode_sexp(v)
   local dt2_h = enc_head(DT.SEXP, #v_enc)
   local ntot2 = #dt2_h + #v_enc
+
   local cmd_h = enc_cmd_head(CMD.assignSEXP, ntot1 + ntot2)
-  
+
   self._sconn:send(cmd_h)
   self._sconn:send(dt1_h..data1)
   self._sconn:send(dt2_h)
@@ -607,7 +625,7 @@ connect = function(address, port)
     err("error", serr)
   end
   local id, serr = sconn:receive(32)
-  if not id then 
+  if not id then
     err("error", serr)
   end
   id = id:sub(1, 12)
@@ -620,41 +638,59 @@ connect = function(address, port)
   end
   return r
 end
-end
 
-local function list(names, values)
-  if #names ~= #values then
-    err("constraint", "#names: ", #names, " ~= #values: ", #values)
+local function asmatrix(data)
+  local o = {}
+  local nrow = #data
+  local ncol = #data[1]
+  for c=1,ncol do
+    for r=1,nrow do
+      o[#o+1] = data[r][c]
+    end
   end
-  return with({ names = names }, vec(values))
+  return with({ dim = asint{ nrow, ncol } }, o) -- Array, not generic R vector.
 end
 
-local function dataframe(names, values, rownames) -- Cannot do without rownames.
-  if #names ~= #values then
-    err("constraint", "#names: ", #names, " ~= #values: ", #values)
+local function defaultnames(n)
+  local o = { }
+  for i=1,n do
+    o[i] = "V"..tostring(i)
+  end
+  return o
+end
+
+local function defaultrownames(n)
+  local o = { }
+  for i=1,n do
+    o[i] = tostring(i)
+  end
+  return o
+end
+
+local function aslist(data, names)
+  names = names or defaultnames(#data)
+  if #names ~= #data then
+    err("constraint", "#names: ", #names, " ~= #data: ", #data)
+  end
+  return with({ names = names }, asvec(data))
+end
+
+local function asdataframe(data, names, rownames)
+  names    = names    or defaultnames(#data)
+  rownames = rownames or defaultrownames(isatom(data[1]) and 1 or #data[1])
+  if #names ~= #data then
+    err("constraint", "#names: ", #names, " ~= #data: ", #data)
   end
   local nrow = #rownames
-  for i=1,#values do
-    local n = isatom(values[i]) and 1 or #values[i]
+  for i=1,#data do
+    local n = isatom(data[i]) and 1 or #data[i]
     if nrow ~= n then
-      err("constraint", "number of elements must be equal in each column", 
+      err("constraint", "number of elements must be equal in each column",
           " got ", nrow, " and ", n)
     end
   end
   return with({ names = names, ["row.names"] = rownames, class = "data.frame" },
-    vec(values))
-end
-
-local function matrix(values, nrow, ncol)
-  local o = {}
-  nrow = nrow or #values
-  ncol = ncol or #values[1]
-  for c=1,ncol do
-    for r=1,nrow do
-      o[#o+1] = values[r][c]
-    end
-  end
-  return with({ dim = int{nrow, ncol} }, o)
+    asvec(data))
 end
 
 local function tomap(x)
@@ -682,17 +718,15 @@ local function to2darray(x)
 end
 
 return {
-  connect    = connect,
-  attributes = attributes,
-  with       = with,
-  vec        = vec,
-  pairlist   = pairlist,
-  int        = int,
-  
-  list       = list,
-  dataframe  = dataframe,
-  matrix     = matrix,
-  
-  tomap      = tomap,
-  to2darray  = to2darray,
+  connect     = connect,
+  attributes  = attributes,
+  with        = with,
+  aspairlist  = aspairlist,
+  asint       = asint,
+  asmatrix    = asmatrix,
+  asvec       = asvec,
+  aslist      = aslist,
+  asdataframe = asdataframe,
+  tomap       = tomap,
+  to2darray   = to2darray,
 }
