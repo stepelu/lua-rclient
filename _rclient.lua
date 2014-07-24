@@ -255,7 +255,8 @@ end
 
 local function isatom(x)
   local t = type(x)
-  return t == "number" or t == "string" or t =="boolean" or iscomplex(x)
+  return t == "nil" or t == "number" or t == "string" or t =="boolean" or 
+         iscomplex(x)
 end
 
 local int_mt = { }
@@ -300,10 +301,7 @@ end
 
 -- TODO: Binary data.
 local function data_xt(data)
-  if type(data) == "nil" then
-    return nil, XT.NULL
-  end
-  if isatom(data) then
+  if type(data) ~= "table" then
     data = { data }
   end
   if isint(data) then
@@ -317,7 +315,9 @@ local function data_xt(data)
   if not isatom(data[1]) then
     err("constraint", "unsupported atomic type "..tostring(t))
   end
-  if t == "number" then
+  if t == "nil" then
+    return nil, XT.NULL
+  elseif t == "number" then
     return data, XT.ARRAY_DOUBLE
   elseif t == "string" then
     return data, XT.ARRAY_STR
@@ -670,7 +670,7 @@ local function to2darray(x)
   for r=1,nrow do
     o[r] = {}
     for c=1,ncol do
-      o[r][c] = x[c + (r-1)*ncol]
+      o[r][c] = x[r + (c-1)*nrow] -- In R storage is col-major.
     end
   end
   return o
