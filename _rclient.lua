@@ -614,7 +614,12 @@ connect = function(address, port)
   if not (id == "Rsrv0103QAP1") then
     err("error", "expected version Rsrv0103QAP1, got "..id)
   end
-  return setmetatable({ _sconn = sconn }, rconn_mt)
+  local r = setmetatable({ _sconn = sconn }, rconn_mt)
+  if os.getenv("LUA_EXEC") then
+    local _ = r["setwd('"..os.getenv("LUA_EXEC").."')"]
+  end
+  return r
+end
 end
 
 local function list(names, values)
