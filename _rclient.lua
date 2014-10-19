@@ -9,9 +9,10 @@
 -- license: full text in file LICENSE.TXT in the library's root folder.
 --------------------------------------------------------------------------------
 
--- TODO: Implement byte swapping for different endianness (correctness).
--- TODO: Check constant atomic type in arrays (check).
--- TODO: Speedup all the arrays, work directly on buffer (optimization).
+-- TODO: Implement byte swapping for different endianness.
+-- TODO: Remove limitation of not-nested list and data.frames.
+-- TODO: Consider whether to allow exchanging more kinds of data.
+-- TODO: Speedup all the arrays, work directly on buffer.
 
 local ffi  = require "ffi"
 local bit  = require "bit"
@@ -29,12 +30,8 @@ local bo = bit.bor
 local ba = bit.band
 local tobit = bit.tobit
 
-local function err(code, msg)
-  error("rclient["..code.."]: "..msg)
-end
-
 local function rerr(code, msg)
-  error("R["..code.."]: "..msg)
+  error("R["..code.."]: "..tostring(msg))
 end
 
 -- String serialization format for any command (size here limited to 4GB, it
@@ -238,13 +235,13 @@ end
 local xt_decode = {}
 
 setmetatable(xt_decode, { __index = function(self, k)
-  err("constraint", "unsupported decoding of XT: "..(TX[k] or k)) end
+  error("unsupported decoding of XT: "..(TX[k] or k)) end
 })
 
 local xt_encode = {}
 
 setmetatable(xt_encode, { __index = function(self, k)
-  err("constraint", "unsupported encoding of XT: "..(TX[k] or k)) end
+  error("unsupported encoding of XT: "..(TX[k] or k)) end
 })
 
 local function iscomplex(x)
@@ -277,14 +274,14 @@ local function isvec(x)
   return type(x) == "table" and getmetatable(x) == vec_mt
 end
 
-local att_mt = {}
+local attr_mt = {}
 
-local function with(att, x)
-  return setmetatable({ att, x }, att_mt)
+local function with(attr, x)
+  return setmetatable({ attr, x }, attr_mt)
 end
 
 local function iswith(x)
-  return type(x) == "table" and getmetatable(x) == att_mt
+  return type(x) == "table" and getmetatable(x) == attr_mt
 end
 
 local pli_mt = {}
@@ -330,7 +327,7 @@ local function data_xt(data)
   end
   local t = type(data[1])
   if not isatom(data[1]) then
-    err("constraint", "unsupported atomic type "..tostring(t))
+    error("unsupported atomic type "..tostring(t))
   end
   if t == "nil" then
     return nil, XT.NULL
@@ -350,12 +347,14 @@ local function decode_sexp(xt_t, s)
   xt_t = ba(xt_t, 63)
   if attr then
     --print("Beg decode attr ")
-    local att_t, att_f, att_l = dec_head(s)
-    local att = decode_sexp(att_t, s:sub(att_f, att_l))
+    local attr_t, attr_f, attr_l = dec_head(s)
+    local attr = decode_sexp(attr_t, s:sub(attr_f, attr_l))
     --print("End encode attr ")
     --print("Decode: "..(TX[xt_t] or xt_t))
-    local o = xt_decode[xt_t](s:sub(att_l + 1, #s))
-    attr_cache[o] = att
+    local o = xt_decode[xt_t](s:sub(attr_l + 1, #s))
+    if o then
+      attr_cache[o] = attr
+    end
     return o
   else
     --print("Decode: "..(TX[xt_t] or xt_t))
@@ -533,7 +532,7 @@ xt_encode[XT.LIST_TAG] = function(x)
     assert(type(k) == "string")
     local k_v = xt_encode[XT.STR](k)
     local k_h = enc_head(XT.SYMNAME, #k_v)
-    table.insert(o, encode_sexp(v)..k_h..k_v) -- TODO: Why switch, it s a bug?
+    table.insert(o, encode_sexp(v)..k_h..k_v) -- TODO: Why switch?
   end
   return table.concat(o)
 end
@@ -547,14 +546,14 @@ local function sexp_type(x)
   elseif t == "string"   then return XT.ARRAY_STR
   elseif t == "boolean"  then return XT.ARRAY_BOOL
   elseif iscomplex(x[1]) then return XT.ARRAY_CPLX
-  else   err("constraint", "unsupported Lua type ", t)
+  else   error("unsupported Lua type "..tostring(t))
   end
 end
 
 local function resp(sconn)
   local cmd_h = sconn:receive(16)
   local resp, length = dec_cmd_head(cmd_h)
-  if not (resp == RESP.OK) then rerr("error", ERR[br(resp, 24)]) end
+  if not (resp == RESP.OK) then rerr(ERR[br(resp, 24)], "no details") end
   if length > 0 then
     local data = sconn:receive(length)
     local dt_t, dt_f, dt_l = dec_head(data)
@@ -576,27 +575,100 @@ end
 local function try_eval(sconn, s)
   local trys = 'try(eval(parse(text="' .. s .. '")),silent=TRUE)'
   local o = eval(sconn, trys)
-  local att = attributes(o)
-  if att and att.class and att.class[1] == "try-error" then
-    rerr("error", o[1])
+  local attr = attributes(o)
+  if attr and attr.class and attr.class[1] == "try-error" then
+    rerr("eval", o[1])
   end
   return o
 end
 
 local rconn_mt = {}
-rconn_mt.__index = rconn_mt
 
-function rconn_mt:__call(s)
+function rconn_mt:__call(s, out)
+  out = out or print
   local sp = split(s, "\n")
   for i=1,#sp do
     local caps = 'capture.output('..sp[i]..')'
     local o = try_eval(self._sconn, caps)
-    print(table.concat(o, "\n"))
+    if #o > 0 then
+      out(table.concat(o, "\n"))
+    end
   end
 end
 
+local function tomatrix(x)
+  local nrow, ncol = attributes(x).dim[1], attributes(x).dim[2]
+  local o = { }
+  for r=1,nrow do
+    o[r] = { }
+    for c=1,ncol do
+      o[r][c] = x[r + (c-1)*nrow] -- In R storage is col-major.
+    end
+  end
+  return o
+end
+
+local function tolist(x)
+  local names = attributes(x).names
+  for i=1,#names do
+    x[names[i]] = x[i]
+  end
+  x[0] = { names }
+  return x
+end
+
+local function todataframe(x)
+  x = tolist(x)
+  x[0][2] = attributes(x)["row.names"]
+  return x
+end
+
+local has = { }
+
+local R_attr = {
+  { tomatrix,      
+    1, { dim = has } },
+  { tolist,        
+    1, { names = has } },
+  { todataframe,   
+    3, { names = has, ["row.names"] = has, class = "data.frame" } },
+}
+
+local function agrees(expect, n, attr)
+  local i = 0
+  for k,v in pairs(attr) do
+    if not expect[k] then 
+      return false 
+    end
+    if expect[k] ~= has and expect[k] ~= v[1] then
+      return false
+    end
+    i = i + 1
+  end
+  return i == n
+end
+
+-- TODO: In theory it's possible to construct objects on R side that will get 
+-- TODO: miss-classified here, as I'm checking the top-level attributes only.
+local function tolua(self, k)
+  local v = try_eval(self._sconn, k)
+  if type(v) == "nil" then -- NULL
+    return v 
+  elseif not attributes(v) then -- Flat generic vector or array.
+    return v 
+  else -- Other supported types.
+    local attr = attributes(v)
+    for i=1,#R_attr do
+      if agrees(R_attr[i][3], R_attr[i][2], attr) then
+        return R_attr[i][1](v)
+      end
+    end
+  end
+  error("unsupported R object")
+end
+
 function rconn_mt:__index(k)
-  return try_eval(self._sconn, k)
+  return tolua(self, k)
 end
 
 function rconn_mt:__newindex(k, v)
@@ -622,30 +694,37 @@ connect = function(address, port)
   port = port or 6311
   local sconn, serr = sok.connect(address, port)
   if not sconn then
-    err("error", serr)
+    error(serr)
   end
   local id, serr = sconn:receive(32)
   if not id then
-    err("error", serr)
+    error(serr)
   end
   id = id:sub(1, 12)
   if not (id == "Rsrv0103QAP1") then
-    err("error", "expected version Rsrv0103QAP1, got "..id)
+    error("expected version Rsrv0103QAP1, got "..id)
   end
   local r = setmetatable({ _sconn = sconn }, rconn_mt)
-  if os.getenv("LUA_EXEC") then
-    local _ = r["setwd('"..os.getenv("LUA_EXEC").."')"]
+  local luaexec = os.getenv("LUA_EXEC")
+  if luaexec then
+    if jit.os == "Windows" then
+      -- On windows paths use \ instead of /, interpreted here as escapes.
+      luaexec = luaexec:gsub([[\]], [[/]])
+    end
+    local _ = r["setwd('"..luaexec.."')"]
   end
   return r
 end
 
 local function asmatrix(data)
-  local o = {}
+  local o = { }
   local nrow = #data
   local ncol = #data[1]
+  local i = 0
   for c=1,ncol do
     for r=1,nrow do
-      o[#o+1] = data[r][c]
+      i = i + 1
+      o[i] = data[r][c]
     end
   end
   return with({ dim = asint{ nrow, ncol } }, o) -- Array, not generic R vector.
@@ -654,7 +733,7 @@ end
 local function defaultnames(n)
   local o = { }
   for i=1,n do
-    o[i] = "V"..tostring(i)
+    o[i] = "X"..tostring(i)
   end
   return o
 end
@@ -670,7 +749,7 @@ end
 local function aslist(data, names)
   names = names or defaultnames(#data)
   if #names ~= #data then
-    err("constraint", "#names: ", #names, " ~= #data: ", #data)
+    error("#names: "..(#names).." ~= #data: "..(#data))
   end
   return with({ names = names }, asvec(data))
 end
@@ -679,54 +758,28 @@ local function asdataframe(data, names, rownames)
   names    = names    or defaultnames(#data)
   rownames = rownames or defaultrownames(isatom(data[1]) and 1 or #data[1])
   if #names ~= #data then
-    err("constraint", "#names: ", #names, " ~= #data: ", #data)
+    error("#names: "..(#names).." ~= #data: "..(#data))
   end
   local nrow = #rownames
   for i=1,#data do
     local n = isatom(data[i]) and 1 or #data[i]
     if nrow ~= n then
-      err("constraint", "number of elements must be equal in each column",
-          " got ", nrow, " and ", n)
+      error("number of elements must be equal in each column, got "..nrow..
+            " and "..n)
     end
   end
   return with({ names = names, ["row.names"] = rownames, class = "data.frame" },
     asvec(data))
 end
 
-local function tomap(x)
-  local names = attributes(x).names
-  assert(names)
-  local o = {}
-  for i=1,#names do
-    o[names[i]] = x[i]
-  end
-  return o
-end
-
-local function to2darray(x)
-  local nrow, ncol = attributes(x).dim[1], attributes(x).dim[2]
-  assert(nrow)
-  assert(ncol)
-  local o = {}
-  for r=1,nrow do
-    o[r] = {}
-    for c=1,ncol do
-      o[r][c] = x[r + (c-1)*nrow] -- In R storage is col-major.
-    end
-  end
-  return o
-end
-
 return {
   connect     = connect,
-  attributes  = attributes,
-  with        = with,
-  aspairlist  = aspairlist,
-  asint       = asint,
   asmatrix    = asmatrix,
-  asvec       = asvec,
   aslist      = aslist,
   asdataframe = asdataframe,
-  tomap       = tomap,
-  to2darray   = to2darray,
+  -- attributes  = attributes,
+  -- with        = with,
+  -- aspairlist  = aspairlist,
+  -- asint       = asint,
+  -- asvec       = asvec,
 }
