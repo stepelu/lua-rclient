@@ -705,13 +705,14 @@ connect = function(address, port)
     error("expected version Rsrv0103QAP1, got "..id)
   end
   local r = setmetatable({ _sconn = sconn }, rconn_mt)
+  r('options(error=function() NULL)', function() end)
   local luaexec = os.getenv("LUA_EXEC")
   if luaexec then
     if jit.os == "Windows" then
       -- On windows paths use \ instead of /, interpreted here as escapes.
       luaexec = luaexec:gsub([[\]], [[/]])
     end
-    local _ = r["setwd('"..luaexec.."')"]
+    r("setwd('"..luaexec.."')", function() end)  
   end
   return r
 end
