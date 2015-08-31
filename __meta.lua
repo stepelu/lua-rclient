@@ -1,5 +1,6 @@
 return {
-  version = "1.0.1",
+  name = "rclient",
+  version = "1.0.2",
   require = {
     luajit = "2.0",
     socket = "2.0",
