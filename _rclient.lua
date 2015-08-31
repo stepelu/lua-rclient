@@ -34,6 +34,8 @@ local function rerr(code, msg)
   error("R["..code.."]: "..tostring(msg))
 end
 
+local NA_integer_ = -2147483648
+
 -- String serialization format for any command (size here limited to 4GB, it
 -- follows data_size[56] is never used):
 -- | cmd_head[16] | head[4 or 8] | data[?] |
@@ -617,9 +619,18 @@ local function tolist(x)
   return x
 end
 
+local function sequence(n)
+  local o = { }
+  for i=1,n do 
+    o[i] = i
+  end
+  return o
+end
+
 local function todataframe(x)
   x = tolist(x)
-  x[0][2] = attributes(x)["row.names"]
+  local row_names = attributes(x)["row.names"]
+  x[0][2] = row_names[1] == NA_integer_ and sequence(-row_names[2]) or row_names
   return x
 end
 
