@@ -589,9 +589,7 @@ local rconn_mt = {}
 
 function rconn_mt:__call(s, out)
   out = out or print
-  local sp = split(s, "\n")
-  for i=1,#sp do
-    local caps = 'capture.output('..sp[i]..')'
+  local caps = 'capture.output({'..s..'})'
     local o = try_eval(self._sconn, caps)
     if #o > 0 then
       out(table.concat(o, "\n"))
