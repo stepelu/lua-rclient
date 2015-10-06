@@ -23,12 +23,11 @@ if not ffi.abi("le") then
   error("NYI: only little endian architectures are supported")
 end
 
-local split, trim = xsys.string.split, xsys.string.trim
+local split = xsys.string.split
 local br = bit.rshift
 local bl = bit.lshift
 local bo = bit.bor
 local ba = bit.band
-local tobit = bit.tobit
 
 local function rerr(code, msg)
   error("R["..code.."]: "..tostring(msg))
@@ -217,7 +216,7 @@ end
 
 local function dec_head(s)
   local t = dec.byte(s:sub(1, 1))
-  local first, last = 0, 0
+  local first, last
   if not (ba(t, LARGE) ~= 0) then
     first = 5
     last = first + dec.int24(s:sub(2, 4)) - 1
@@ -236,13 +235,13 @@ end
 
 local xt_decode = {}
 
-setmetatable(xt_decode, { __index = function(self, k)
+setmetatable(xt_decode, { __index = function(_, k)
   error("unsupported decoding of XT: "..(TX[k] or k)) end
 })
 
 local xt_encode = {}
 
-setmetatable(xt_encode, { __index = function(self, k)
+setmetatable(xt_encode, { __index = function(_, k)
   error("unsupported encoding of XT: "..(TX[k] or k)) end
 })
 
@@ -350,12 +349,12 @@ local function decode_sexp(xt_t, s)
   if attr then
     --print("Beg decode attr ")
     local attr_t, attr_f, attr_l = dec_head(s)
-    local attr = decode_sexp(attr_t, s:sub(attr_f, attr_l))
+    local attr2 = decode_sexp(attr_t, s:sub(attr_f, attr_l))
     --print("End encode attr ")
     --print("Decode: "..(TX[xt_t] or xt_t))
     local o = xt_decode[xt_t](s:sub(attr_l + 1, #s))
     if o then
-      attr_cache[o] = attr
+      attr_cache[o] = attr2
     end
     return o
   else
@@ -375,14 +374,14 @@ local function encode_sexp(x)
     local d_h       = enc_head(d_sexp, #d_v + #a_h + #a_v, true)
     return d_h..a_h..a_v..d_v
   else
-    local x, x_sexp = data_xt(x)
-    local x_v       = xt_encode[x_sexp](x)
+    local x2, x_sexp = data_xt(x)
+    local x_v       = xt_encode[x_sexp](x2)
     local x_h       = enc_head(x_sexp, #x_v)
     return x_h..x_v
   end
 end
 
-xt_decode[XT.NULL] = function(s)
+xt_decode[XT.NULL] = function()
   return nil
 end
 
@@ -444,7 +443,7 @@ end
 
 xt_decode[XT.ARRAY_STR] = function(s)
   -- Removes padding, and split over \0.
-  return xsys.string.split(s:gsub(string.char(01),''), '%z')
+  return split(s:gsub(string.char(01),''), '%z')
 end
 
 xt_decode[XT.ARRAY_BOOL] = function(s)
@@ -455,7 +454,7 @@ xt_decode[XT.ARRAY_BOOL] = function(s)
 end
 
 xt_decode[XT.RAW] = function(s)
-  local n = dec.int(s:sub(1, 4))
+  dec.int(s:sub(1, 4))
   return s:sub(5, #s)
 end
 
@@ -479,7 +478,7 @@ xt_encode[XT.NULL] = function()
 end
 
 xt_encode[XT.STR] = function(x)
-  local trail = (4 - (#x + 1)%4)%4 -- 4 bytes alignement.
+  local trail = (4 - (#x + 1)%4)%4 -- 4 bytes alignment.
   return x..string.char(00)..string.rep(string.char(01), trail)
 end
 
@@ -516,7 +515,7 @@ xt_encode[XT.ARRAY_BOOL] = function(x)
 end
 
 xt_encode[XT.RAW] = function(x)
-  local trail = (4 - (#x[i])%4)%4 -- 4 bytes alignement.
+  local trail = (4 - (#x)%4)%4 -- 4 bytes alignment.
   return enc.int(#x)..x..string.rep(string.char(01), trail)
 end
 
@@ -540,25 +539,25 @@ xt_encode[XT.LIST_TAG] = function(x)
 end
 
 -- TODO: Binary data.
-local function sexp_type(x)
-  if x == nil then return XT.NULL end
-  local t = type(x[1])
-  assert(t ~= "nil")
-  if     t == "number"   then return XT.ARRAY_DOUBLE
-  elseif t == "string"   then return XT.ARRAY_STR
-  elseif t == "boolean"  then return XT.ARRAY_BOOL
-  elseif iscomplex(x[1]) then return XT.ARRAY_CPLX
-  else   error("unsupported Lua type "..tostring(t))
-  end
-end
+-- local function sexp_type(x)
+--   if x == nil then return XT.NULL end
+--   local t = type(x[1])
+--   assert(t ~= "nil")
+--   if     t == "number"   then return XT.ARRAY_DOUBLE
+--   elseif t == "string"   then return XT.ARRAY_STR
+--   elseif t == "boolean"  then return XT.ARRAY_BOOL
+--   elseif iscomplex(x[1]) then return XT.ARRAY_CPLX
+--   else   error("unsupported Lua type "..tostring(t))
+--   end
+-- end
 
 local function resp(sconn)
   local cmd_h = sconn:receive(16)
-  local resp, length = dec_cmd_head(cmd_h)
-  if not (resp == RESP.OK) then rerr(ERR[br(resp, 24)], "no details") end
+  local rresp, length = dec_cmd_head(cmd_h)
+  if not (rresp == RESP.OK) then rerr(ERR[br(rresp, 24)], "no details") end
   if length > 0 then
     local data = sconn:receive(length)
-    local dt_t, dt_f, dt_l = dec_head(data)
+    local dt_t, dt_f = dec_head(data)
     dt_t = ba(dt_t, 63) -- Cannot have HAS_ATTR, only LARGE.
     assert(dt_t == DT.SEXP)
     local xt_t, xt_f, xt_l = dec_head(data:sub(dt_f, math.min(#data, dt_f + 7)))
@@ -590,10 +589,9 @@ local rconn_mt = {}
 function rconn_mt:__call(s, out)
   out = out or print
   local caps = 'capture.output({'..s..'})'
-    local o = try_eval(self._sconn, caps)
-    if #o > 0 then
-      out(table.concat(o, "\n"))
-    end
+  local o = try_eval(self._sconn, caps)
+  if #o > 0 then
+    out(table.concat(o, "\n"))
   end
 end
 
@@ -699,16 +697,16 @@ function rconn_mt:__newindex(k, v)
   resp(self._sconn)
 end
 
-connect = function(address, port)
+local function connect(address, port)
   address = address or "localhost"
   port = port or 6311
   local sconn, serr = sok.connect(address, port)
   if not sconn then
     error(serr)
   end
-  local id, serr = sconn:receive(32)
+  local id, cerr = sconn:receive(32)
   if not id then
-    error(serr)
+    error(cerr)
   end
   id = id:sub(1, 12)
   if not (id == "Rsrv0103QAP1") then
