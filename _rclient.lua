@@ -575,7 +575,8 @@ local function eval(sconn, s)
 end
 
 local function try_eval(sconn, s)
-  local trys = 'try(eval(parse(text="' .. s .. '")),silent=TRUE)'
+  local escaped_s = s:gsub([["]], [[\"]]) -- TODO: Check escaping rules for R.=
+  local trys = 'try(eval(parse(text="' .. escaped_s .. '")),silent=TRUE)'
   local o = eval(sconn, trys)
   local attr = attributes(o)
   if attr and attr.class and attr.class[1] == "try-error" then
