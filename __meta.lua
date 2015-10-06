@@ -1,6 +1,6 @@
 return {
   name = "rclient",
-  version = "1.0.2",
+  version = "1.1.0",
   require = {
     luajit = "2.0",
     socket = "2.0",
@@ -8,5 +8,5 @@ return {
   },
   license = "MIT <http://opensource.org/licenses/MIT>",
   homepage = "http://scilua.org/rclient.html",
-  description = "RCLIENT - R Interface",
+  description = "R programming language interface",
 }
