@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 -- A client for Rserve (http://rforge.net/Rserve/).
 --
--- Copyright (C) 2011-2014 Stefano Peluchetti. All rights reserved.
+-- Copyright (C) 2011-2016 Stefano Peluchetti. All rights reserved.
 --
 -- Features, documentation and more: http://www.scilua.org .
 --
