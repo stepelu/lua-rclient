@@ -1,11 +1,12 @@
-Rclient
-=======
+RCLIENT - LuaJIT Client for Rserve
+==================================
 
-Rclient is a MIT licensed library that allows to execute arbitrary R programs within LuaJIT. Being the most widely used language for statistical computing, R features a huge number of scientific libraries. Of particular relevance is the possibility to leverage on the plotting capabilities of ggplot2 and similar libraries.
+LuaJIT client for [Rserve](http://www.rforge.net/Rserve/) which is used to host a (local or remote) R session toward which a connection is established.
 
-More specifically, this library implements a client for Rserve which is used to host a (local or remote) R session toward which a connection is established. For users which are not using the Universal Package: this library requires the LuaSocket library to be installed.
+## Features
 
-The following example presents the main features of this library:
+- exchange data between LuaJIT and R (arrays, matrices, lists, data.frames)
+- execute arbitrary R code from LuaJIT
 
 ```lua
 local R = require "rclient"
@@ -39,4 +40,15 @@ print(df[1][1], df[2][1], df[3][1]) --> 7 8 9
 print(df.a[1],  df.b[1],  df.c[1] ) --> 7 8 9
 ```
 
-Info: http://scilua.org/rclient.html
+## Install
+
+This module is included in the [ULua](http://ulua.io) distribution, to install it use:
+```
+upkg add rclient
+```
+
+Alternatively, manually install this module making sure that all dependencies listed in the `require` section of [`__meta.lua`](__meta.lua) are installed as well (dependencies starting with `clib_` are standard C dynamic libraries).
+
+## Documentation
+
+Refer to the [official documentation](http://scilua.org/rclient.html).
