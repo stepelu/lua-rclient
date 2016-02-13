@@ -1,5 +1,5 @@
-RCLIENT - LuaJIT Client for Rserve
-==================================
+RClient: LuaJIT Client for Rserve
+=================================
 
 LuaJIT client for [Rserve](http://www.rforge.net/Rserve/) which is used to host a (local or remote) R session toward which a connection is established.
 
